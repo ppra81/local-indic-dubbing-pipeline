@@ -134,7 +134,7 @@ curl http://localhost:8000/health
 - WER/CER evaluate ASR only; translation and TTS need bilingual human/automatic quality metrics and listening tests.
 - API jobs are synchronous and local-disk based; there is no queue, authentication, quota, or object storage.
 
-## Why this maps to an ML Engineer — Dubbing role
+## Note
 
 The repository covers the complete inference path and the engineering around models: interchangeable ASR/translation/TTS runtimes, language metadata, segment timing, objective ASR evaluation, latency instrumentation, reproducible interfaces, failure messages, packaging, tests, and deployment. It also makes the central production tradeoffs explicit: code-mixing, dialect coverage, model provisioning, voice licensing, temporal alignment, tail latency, streaming, and edge optimization.
 
