@@ -1,0 +1,10 @@
+{
+  "source_language": "hi-IN",
+  "target_language": "en-IN",
+  "asr_backend": "stub",
+  "translation_backend": "stub",
+  "tts_backend": "stub",
+  "model_size": "tiny",
+  "device": "cpu",
+  "compute_type": "int8"
+}

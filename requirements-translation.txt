@@ -1,0 +1,9 @@
+torch
+# IndicTrans2 custom code requires Transformers 4.x (transformers.onnx was
+# removed in 5.x); this modern 4.x release supports the current tokenizer.
+transformers==4.51.3
+# Optional on platforms with a C++ compiler: indictranstoolkit==1.1.1
+# The adapter includes a pure-Python Hindi/English preprocessing fallback for Windows.
+sentencepiece
+sacremoses
+indic-nlp-library
