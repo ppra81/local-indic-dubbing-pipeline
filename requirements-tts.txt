@@ -1,0 +1,4 @@
+# Piper and eSpeak-NG are system executables.
+# Install one locally and provide a compatible voice/model where applicable.
+# Converts Devanagari to phonetic ITRANS for the Windows eSpeak Hindi voice.
+indic-transliteration
