@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 ASR_BACKENDS = ("stub", "faster-whisper", "whisper")
@@ -10,6 +11,12 @@ TTS_BACKENDS = ("stub", "piper", "espeak")
 MODEL_SIZES = ("tiny", "base", "small")
 DEVICES = ("cpu", "cuda")
 COMPUTE_TYPES = ("int8", "float16", "float32")
+OFFLINE_ENV_VAR = "DUBBING_PIPELINE_OFFLINE"
+
+
+def offline_mode_enabled() -> bool:
+    """Default to offline operation; opt in to network-capable model loading explicitly."""
+    return os.environ.get(OFFLINE_ENV_VAR, "1").lower() not in {"0", "false", "no", "off"}
 
 
 @dataclass(frozen=True)

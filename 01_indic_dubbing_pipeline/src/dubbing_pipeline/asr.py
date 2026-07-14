@@ -6,9 +6,14 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from .audio import create_segments_from_text
+from .config import offline_mode_enabled
 from .schemas import ASRResult, Segment
 
 ASR_INSTALL_MESSAGE = "Install optional ASR dependencies with pip install -r requirements-asr.txt"
+ASR_OFFLINE_MESSAGE = (
+    "Offline mode is enabled. Pre-cache the selected ASR model locally or set "
+    "DUBBING_PIPELINE_OFFLINE=0 to allow model downloads."
+)
 
 
 class BaseASRAdapter(ABC):
@@ -35,7 +40,21 @@ class FasterWhisperASRAdapter(BaseASRAdapter):
             from faster_whisper import WhisperModel
         except ImportError as exc:
             raise RuntimeError(ASR_INSTALL_MESSAGE) from exc
-        model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+        try:
+            model = WhisperModel(
+                self.model_size,
+                device=self.device,
+                compute_type=self.compute_type,
+                local_files_only=offline_mode_enabled(),
+            )
+        except TypeError:
+            if offline_mode_enabled() and not Path(self.model_size).exists():
+                raise RuntimeError(ASR_OFFLINE_MESSAGE)
+            model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+        except Exception as exc:
+            if offline_mode_enabled():
+                raise RuntimeError(f"{ASR_OFFLINE_MESSAGE} Original error: {exc}") from exc
+            raise
         raw_segments, info = model.transcribe(str(audio_path), language=language.split("-")[0])
         segments = [Segment(id=i, text=s.text.strip(), start=float(s.start), end=float(s.end), confidence=None) for i, s in enumerate(raw_segments)]
         text = " ".join(segment.text for segment in segments).strip()
@@ -54,6 +73,10 @@ class WhisperASRAdapter(BaseASRAdapter):
             import whisper
         except ImportError as exc:
             raise RuntimeError(ASR_INSTALL_MESSAGE) from exc
+        if offline_mode_enabled() and not Path(self.model_size).exists():
+            cache_path = Path.home() / ".cache" / "whisper" / f"{self.model_size}.pt"
+            if not cache_path.exists():
+                raise RuntimeError(ASR_OFFLINE_MESSAGE)
         model = whisper.load_model(self.model_size, device=self.device)
         result = model.transcribe(str(audio_path), language=language.split("-")[0], fp16=self.compute_type == "float16")
         segments = [Segment(id=i, text=s["text"].strip(), start=float(s["start"]), end=float(s["end"]), confidence=None) for i, s in enumerate(result.get("segments", []))]
@@ -68,4 +91,3 @@ def create_asr_adapter(backend: str, model_size: str, device: str, compute_type:
     if backend == "whisper":
         return WhisperASRAdapter(model_size, device, compute_type)
     raise ValueError(f"Unsupported ASR backend: {backend}")
-

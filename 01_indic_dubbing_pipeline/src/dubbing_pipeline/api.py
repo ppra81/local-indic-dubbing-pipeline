@@ -9,7 +9,7 @@ from uuid import uuid4
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
-from .config import ASR_BACKENDS, TRANSLATION_BACKENDS, TTS_BACKENDS
+from .config import ASR_BACKENDS, TRANSLATION_BACKENDS, TTS_BACKENDS, offline_mode_enabled
 from .eval import evaluate_transcript
 from .pipeline import DubbingPipeline
 from .schemas import DubbingJobResult, DubbingRunRequest, EvaluationResult, TranscriptEvaluationRequest
@@ -32,7 +32,7 @@ def backend_status() -> dict[str, list[dict[str, object]]]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "offline": str(offline_mode_enabled()).lower()}
 
 
 @app.get("/backends")
@@ -58,8 +58,8 @@ def upload_audio_job(
     audio: UploadFile = File(...),
     source_language: str = Form("hi-IN"),
     target_language: str = Form("en-IN"),
-    asr_backend: str = Form("faster-whisper"),
-    translation_backend: str = Form("stub"),
+    asr_backend: str = Form("stub"),
+    translation_backend: str = Form("indictrans2"),
     tts_backend: str = Form("espeak"),
     model_size: str = Form("tiny"),
     device: str = Form("cpu"),
@@ -98,7 +98,7 @@ def text_dubbing_job(
     text: str = Form(...),
     source_language: str = Form("hi-IN"),
     target_language: str = Form("en-IN"),
-    translation_backend: str = Form("stub"),
+    translation_backend: str = Form("indictrans2"),
     tts_backend: str = Form("espeak"),
 ) -> dict[str, object]:
     """Run text through translation and TTS and expose the generated artifact."""
@@ -143,25 +143,25 @@ button,select,input,textarea{font:inherit;padding:.7rem;border-radius:7px;border
 textarea{min-height:110px;resize:vertical}button{cursor:pointer;background:#2563eb;color:white;border:0;margin:.35rem .35rem .35rem 0}button:disabled{opacity:.5}
 pre{white-space:pre-wrap;overflow:auto;max-height:420px;background:#080d1a;padding:1rem;border-radius:8px}label{display:block;margin:.35rem 0}audio{width:100%;margin-top:1rem}.recording{background:#dc2626}.muted{color:#94a3b8}.status{padding:.7rem 0;font-weight:600}
 </style></head><body><h1>Local Indic Dubbing Studio</h1>
-<p class="muted">Typed text, audio-file, and microphone inputs. Processing stays on this machine except optional open-source model downloads.</p>
+<p class="muted">Typed text, audio-file, and microphone inputs. Default processing is fully offline and uses stub adapters unless you explicitly select local model backends.</p>
 <div class="card"><h2>Pipeline settings</h2><div class="grid">
 <label>Source language<select id="source"><option>hi-IN</option><option>en-IN</option></select></label>
 <label>Target language<select id="target"><option>en-IN</option><option>hi-IN</option></select></label>
-<label>Translation<select id="translation"><option value="identity">Identity (same language)</option><option value="stub">Stub / glossary-safe</option><option value="indictrans2" selected>IndicTrans2 (heavy)</option></select></label>
-<label>Speech output<select id="tts"><option value="espeak">eSpeak WAV</option><option value="stub">Placeholder</option></select></label></div></div>
+<label>Translation<select id="translation"><option value="indictrans2" selected>IndicTrans2 (local cache only)</option><option value="identity">Identity (same language)</option><option value="stub">Stub / glossary-safe</option></select></label>
+<label>Speech output<select id="tts"><option value="espeak" selected>eSpeak WAV</option><option value="stub">Placeholder</option></select></label></div></div>
 <div class="card"><h2>1. Text input</h2><textarea id="textInput" placeholder="For hi-IN → en-IN, enter Hindi in Devanagari script...">नमस्ते, आज हम स्थानीय भाषण डबिंग प्रणाली का परीक्षण कर रहे हैं।</textarea>
 <button id="textDub">Dub text</button></div>
 <div class="card"><h2>2. Audio-file input</h2><input id="audioFile" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac">
-<button id="fileDub">Upload and dub audio</button><p class="muted">Uses faster-whisper tiny on CPU for transcription.</p></div>
+<button id="fileDub">Upload and dub audio</button><p class="muted">Uses the stub ASR transcript by default. Select real ASR through the API only after pre-caching models locally.</p></div>
 <div class="card"><h2>3. Microphone input</h2><button id="start">Start recording</button><button id="stop" disabled>Stop and dub</button></div>
-<div class="card"><h2>Dubbed output</h2><div id="status" class="status">Ready</div><audio id="player" controls></audio><pre id="result">No result yet.</pre></div>
+<div class="card"><h2>Dubbed output</h2><div id="status" class="status">Ready</div><audio id="player" controls></audio><pre id="artifact"></pre><pre id="result">No result yet.</pre></div>
 <script>
 let recorder,chunks=[];const q=s=>document.querySelector(s),start=q('#start'),stop=q('#stop'),status=q('#status');
 function alignTranslation(){if(q('#source').value===q('#target').value)q('#translation').value='identity';else if(q('#translation').value==='identity')q('#translation').value='indictrans2'}
 q('#source').onchange=alignTranslation;q('#target').onchange=alignTranslation;
 const setting=(id)=>q(id).value;function baseForm(){const f=new FormData();f.append('source_language',setting('#source'));f.append('target_language',setting('#target'));f.append('translation_backend',setting('#translation'));f.append('tts_backend',setting('#tts'));return f}
-async function submit(url,form){status.textContent='Processing locally...';q('#player').removeAttribute('src');try{const response=await fetch(url,{method:'POST',body:form});const data=await response.json();if(!response.ok)throw new Error(data.detail||JSON.stringify(data));q('#result').textContent=JSON.stringify(data.result,null,2);q('#player').src=data.audio_url+'?t='+Date.now();q('#player').load();status.textContent='Completed — press play.';}catch(e){status.textContent='Failed: '+e.message;}}
-function audioForm(file){const f=baseForm();f.append('audio',file);f.append('asr_backend','faster-whisper');f.append('model_size','tiny');f.append('device','cpu');f.append('compute_type','int8');return f}
+async function submit(url,form){status.textContent='Processing locally...';q('#player').removeAttribute('src');q('#artifact').textContent='';try{const response=await fetch(url,{method:'POST',body:form});const data=await response.json();if(!response.ok)throw new Error(data.detail||JSON.stringify(data));q('#result').textContent=JSON.stringify(data.result,null,2);if(data.result.tts.backend==='stub'){const artifact=await fetch(data.audio_url+'?t='+Date.now());q('#artifact').textContent=await artifact.text();status.textContent='Completed — placeholder artifact shown below.';}else{q('#player').src=data.audio_url+'?t='+Date.now();q('#player').load();status.textContent='Completed — press play.';}}catch(e){status.textContent='Failed: '+e.message;}}
+function audioForm(file){const f=baseForm();f.append('audio',file);f.append('asr_backend','stub');f.append('model_size','tiny');f.append('device','cpu');f.append('compute_type','int8');return f}
 q('#textDub').onclick=()=>{const text=q('#textInput').value.trim();if(!text){status.textContent='Enter text first.';return}const f=baseForm();f.append('text',text);submit('/dubbing/jobs/text',f)};
 q('#fileDub').onclick=()=>{const file=q('#audioFile').files[0];if(!file){status.textContent='Choose an audio file first.';return}submit('/dubbing/jobs/upload',audioForm(file))};
 start.onclick=async()=>{try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const type=recorder.mimeType;const ext=type.includes('ogg')?'ogg':'webm';submit('/dubbing/jobs/upload',audioForm(new File([new Blob(chunks,{type})],'microphone.'+ext,{type})));start.disabled=false;stop.disabled=true;start.classList.remove('recording')};recorder.start();start.disabled=true;stop.disabled=false;start.classList.add('recording');status.textContent='Recording...';}catch(e){status.textContent='Microphone error: '+e.message;}};

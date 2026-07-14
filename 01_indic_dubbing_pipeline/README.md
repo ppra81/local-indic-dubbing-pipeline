@@ -7,7 +7,7 @@ audio/video/transcript -> preprocessing -> ASR -> translation -> TTS
                        -> timing + WER/CER + latency -> JSON / CLI / FastAPI
 ```
 
-The project demonstrates adapter design, typed interfaces, artifact persistence, evaluation, observability, API delivery, CLI ergonomics, tests, and containerization. It never calls a paid API. Stub mode is the default and works without model downloads; real backends are explicitly selected and provisioned locally.
+The project demonstrates adapter design, typed interfaces, artifact persistence, evaluation, observability, API delivery, CLI ergonomics, tests, and containerization. It never calls a paid API. Stub mode is the default and works without model downloads; real backends are explicitly selected and provisioned locally. Offline mode is enabled by default with `DUBBING_PIPELINE_OFFLINE=1`.
 
 ## Operating modes
 
@@ -85,7 +85,7 @@ python -m pip install -r requirements-asr.txt
 python -m dubbing_pipeline.cli run --audio-path sample.wav --asr-backend faster-whisper --model-size tiny --device cpu --compute-type int8 --translation-backend stub --tts-backend stub
 ```
 
-Use `--asr-backend whisper` for the reference implementation. The first use commonly downloads model weights; cache or pre-provision them for offline/reproducible environments. Start with `tiny`/`base`, CPU, and `int8` for faster-whisper. OpenAI Whisper generally uses `float32` on CPU. No OpenAI cloud API is used.
+Use `--asr-backend whisper` for the reference implementation. In default offline mode, model weights must already be cached locally; set `DUBBING_PIPELINE_OFFLINE=0` only when you intentionally allow model downloads. Start with `tiny`/`base`, CPU, and `int8` for faster-whisper. OpenAI Whisper generally uses `float32` on CPU. No OpenAI cloud API is used.
 
 ## Optional IndicTrans2
 
@@ -94,7 +94,7 @@ python -m pip install -r requirements-translation.txt
 python -m dubbing_pipeline.cli run --source-text "नमस्ते" --translation-backend indictrans2 --tts-backend stub
 ```
 
-The adapter defaults to an AI4Bharat checkpoint identifier and may download it through Transformers. Pre-download an approved model for offline use. IndicTrans2 checkpoints can need significant RAM/VRAM; production integration should pin a checkpoint revision and apply its documented language tags/preprocessing. The current adapter is a professional integration seam, not a claim of checkpoint-independent translation behavior.
+The adapter defaults to an AI4Bharat checkpoint identifier but uses `local_files_only=True` in default offline mode. Pre-download an approved model for offline use, or set `INDICTRANS2_MODEL` to a local model directory. Set `DUBBING_PIPELINE_OFFLINE=0` only when you intentionally allow Transformers to reach the network. IndicTrans2 checkpoints can need significant RAM/VRAM; production integration should pin a checkpoint revision and apply its documented language tags/preprocessing. The current adapter is a professional integration seam, not a claim of checkpoint-independent translation behavior.
 
 ## Optional Piper or eSpeak-NG
 

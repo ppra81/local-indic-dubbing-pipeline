@@ -1,4 +1,6 @@
 from fastapi.testclient import TestClient
+import os
+import pytest
 
 from dubbing_pipeline.api import app
 
@@ -6,7 +8,7 @@ client = TestClient(app)
 
 
 def test_health_and_backends():
-    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/health").json() == {"status": "ok", "offline": "true"}
     response = client.get("/backends")
     assert response.status_code == 200
     assert response.json()["asr"][0] == {"name": "stub", "available": True}
@@ -28,6 +30,9 @@ def test_live_page_is_available():
     response = client.get("/live")
     assert response.status_code == 200
     assert "Start recording" in response.text
+    assert "f.append('asr_backend','stub')" in response.text
+    assert 'value="indictrans2" selected' in response.text
+    assert 'value="espeak" selected' in response.text
 
 
 def test_upload_rejects_unsupported_file():
@@ -38,7 +43,7 @@ def test_upload_rejects_unsupported_file():
 def test_text_dubbing_endpoint_with_stub(tmp_path, monkeypatch):
     from dubbing_pipeline import api
     monkeypatch.setattr(api, "LIVE_OUTPUT_ROOT", tmp_path.resolve())
-    response = client.post("/dubbing/jobs/text", data={"text": "hello", "tts_backend": "stub"})
+    response = client.post("/dubbing/jobs/text", data={"text": "hello", "translation_backend": "stub", "tts_backend": "stub"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["result"]["asr"]["text"] == "hello"
@@ -64,9 +69,20 @@ def test_text_dubbing_reports_model_access_error(tmp_path, monkeypatch):
 
 
 def test_indictrans_rejects_non_devanagari_hindi_before_inference():
-    import pytest
     from dubbing_pipeline.translate import IndicTrans2TranslationAdapter
 
     adapter = IndicTrans2TranslationAdapter()
     with pytest.raises(ValueError, match="Devanagari"):
         adapter._preprocess("Hello, this is already English", "hi-IN", "en-IN")
+
+
+@pytest.mark.skipif(os.environ.get("RUN_LOCAL_MODEL_TESTS") != "1", reason="requires cached IndicTrans2 model")
+def test_indictrans_translates_user_sports_sentence():
+    from dubbing_pipeline.audio import create_segments_from_text
+    from dubbing_pipeline.translate import IndicTrans2TranslationAdapter
+
+    text = "हेलो, यह हमारी वार्षिक खेल प्रतियोगिता का पहला आधिकारिक अभ्यास है।"
+    adapter = IndicTrans2TranslationAdapter()
+    result = adapter.translate(text, create_segments_from_text(text), "hi-IN", "en-IN")
+    assert "annual sports competition" in result.text.lower()
+    assert "translation of" not in result.text
